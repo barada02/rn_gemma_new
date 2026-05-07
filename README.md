@@ -1,56 +1,65 @@
-# Welcome to your Expo app 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
-
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+                                       
+     ____  _   _    ____ _ _ __ ___  _ __ ___   __ _ 
+    |  _ \| \ | |  / ___| | '_ ` _ \| '_ ` _ \ / _` |
+    | |_) |  \| | | |  _| | | | | | | | | | | | (_| |
+    |_| \_\_| \_| |_|  |_|_|_| |_| |_|_| |_| |_|\__,_|
+                                       
+             ON-DEVICE AI | LITE RT | NITRO
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Overview
+**RN Gemma** is a high-performance React Native application designed for local, private AI inference. It leverages **Google’s LiteRT (formerly TFLite)** and **Nitro Modules** to run the **Gemma-4** model directly on Android hardware, ensuring data privacy and offline capability.
 
-### Other setup steps
+---
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## 🚀 Quick Start
 
-## Learn more
+### 1. Install Dependencies
+```bash
+npm install
+# Ensure native gesture handling is up to date
+npm install react-native-gesture-handler@latest
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+### 2. Native Build (Android)
+Since this project uses custom native modules (Nitro & LiteRT), you must generate the `android` folder and compile the native binaries:
+```bash
+# Generate native directories
+npx expo prebuild
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+# Compile and run on a connected device
+npx expo run:android --variant release
+```
 
-## Join the community
+### 3. Development Server
+Once the native app is installed on your device, you can start the bundler for fast-refresh during UI development:
+```bash
+npx expo start
+```
 
-Join our community of developers creating universal apps.
+---
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 🛠 Technical Architecture
+*   **ML Engine:** LiteRT / LiteRT-LM for mobile-optimized inference.
+*   **Native Bridge:** Nitro Modules (C++ to TS) for near-zero latency communication.
+*   **Routing:** Expo Router (File-based navigation).
+*   **Model:** Gemma-4 (Optimized for on-device execution).
+
+---
+
+## 📦 Releases
+Don't want to build from source? Download the latest pre-compiled APK from the **[Releases](../../releases)** section. 
+
+> **Note:** You will need to provide your own Gemma `.bin` or `.tflite` model files and place them in the application's internal storage path.
+
+---
+
+## 📂 Project Structure
+- **/app**: Main application logic and UI (Expo Router).
+- **/node_modules/react-native-litert-lm**: The core ML inference integration.
+- **/android**: Native Android project configuration.
+
+---
+*Built with ❤️ for the future of Local AI.*
