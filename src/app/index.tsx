@@ -5,37 +5,54 @@ import { createLLM } from "react-native-litert-lm";
 export default function App() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<{ id: string, text: string, sender: string }[]>([]);
-  const [status, setStatus] = useState('Initializing Engine...');
+  const [status, setStatus] = useState('Engine initialized. Ready to download.');
   const [isReady, setIsReady] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const llm = useRef<any>(null);
 
   useEffect(() => {
-    const setup = async () => {
-      try {
-        llm.current = createLLM();
-        setStatus('Loading Gemma (1.5GB)...');
-
-        // Loading from a URL is easiest for hackathons
-        await llm.current.loadModel("https://huggingface.co/litert-community/gemma-2b-it-litert-lm/resolve/main/gemma-2b-it.litertlm", {
-          backend: "gpu", // Hardware acceleration
-          maxTokens: 512,
-          temperature: 0.7
-        });
-
-        setIsReady(true);
-        setStatus('Gemma is Local & Ready');
-      } catch (err: any) {
-        setStatus('Error: ' + err.message);
-        console.error(err);
-      }
-    };
-    setup();
+    try {
+      llm.current = createLLM();
+    } catch (err: any) {
+      console.error(err);
+      setStatus('Engine init error: ' + err.message);
+    }
     return () => llm.current?.close();
   }, []);
 
+  const downloadAndLoadModel = async () => {
+    if (isReady || isDownloading) return true;
+    
+    setIsDownloading(true);
+    setStatus('Downloading Gemma-4 E2B (~1.5GB)... Please wait.');
+    
+    try {
+      await llm.current.loadModel("https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true", {
+        backend: "gpu", // Hardware acceleration
+        maxTokens: 512,
+        temperature: 0.7
+      });
+
+      setIsReady(true);
+      setStatus('Gemma is Local & Ready');
+      setIsDownloading(false);
+      return true;
+    } catch (err: any) {
+      setStatus('Download Error: ' + err.message);
+      console.error("Load Error:", err);
+      setIsDownloading(false);
+      return false;
+    }
+  };
+
   const handleSend = async () => {
-    if (!input.trim() || !isReady) return;
+    if (!input.trim() || isDownloading) return;
+
+    if (!isReady) {
+      const success = await downloadAndLoadModel();
+      if (!success) return; // Stop if download failed
+    }
 
     const userMsg = { id: Date.now().toString(), text: input, sender: 'user' };
     setMessages(prev => [...prev, userMsg]);
@@ -64,7 +81,12 @@ export default function App() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Gemma Local Chat</Text>
         <Text style={[styles.status, {color: isReady ? '#2ecc71' : '#f39c12'}]}>{status}</Text>
-        {!isReady && <ActivityIndicator size="small" color="#f39c12" style={{marginTop: 5}}/>}
+        {isDownloading && <ActivityIndicator size="small" color="#f39c12" style={{marginTop: 5}}/>}
+        {!isReady && !isDownloading && (
+          <TouchableOpacity style={styles.downloadBtn} onPress={downloadAndLoadModel}>
+            <Text style={styles.downloadText}>Download Model</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList data={messages} keyExtractor={item => item.id}
@@ -77,8 +99,8 @@ export default function App() {
       />
 
       <View style={styles.inputArea}>
-        <TextInput style={styles.input} placeholder={isReady ? "Type something..." : "Wait for model..."} value={input} onChangeText={setInput} editable={isReady}/>
-        <TouchableOpacity style={[styles.sendBtn, !isReady && {opacity: 0.5}]} onPress={handleSend} disabled={!isReady}>
+        <TextInput style={styles.input} placeholder={isReady ? "Type something..." : "Type to auto-download & chat..."} value={input} onChangeText={setInput} editable={!isDownloading}/>
+        <TouchableOpacity style={[styles.sendBtn, isDownloading && {opacity: 0.5}]} onPress={handleSend} disabled={isDownloading}>
           <Text style={styles.sendText}>Send</Text>
         </TouchableOpacity>
       </View>
@@ -90,7 +112,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   header: { padding: 40, backgroundColor: '#1e1e1e', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#333' },
   headerTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  status: { fontSize: 12, marginTop: 4 },
+  status: { fontSize: 12, marginTop: 4, textAlign: 'center' },
+  downloadBtn: { marginTop: 10, backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20 },
+  downloadText: { color: '#fff', fontWeight: 'bold' },
   chatList: { padding: 20 },
   bubble: { padding: 12, borderRadius: 20, marginBottom: 12, maxWidth: '85%' },
   userBubble: { backgroundColor: '#3498db', alignSelf: 'flex-end' },
