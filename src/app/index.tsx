@@ -1,58 +1,70 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { createLLM } from "react-native-litert-lm";
+import { useModel } from "react-native-litert-lm";
+import * as FileSystem from 'expo-file-system/legacy';
+
+const MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true";
+const LOCAL_MODEL_PATH = FileSystem.documentDirectory + "gemma-4-E2B-it.litertlm";
 
 export default function App() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<{ id: string, text: string, sender: string }[]>([]);
-  const [status, setStatus] = useState('Engine initialized. Ready to download.');
-  const [isReady, setIsReady] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
-  
-  const llm = useRef<any>(null);
+  const [localModelReady, setLocalModelReady] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  // Check if we already downloaded it previously
   useEffect(() => {
-    try {
-      llm.current = createLLM();
-    } catch (err: any) {
-      console.error(err);
-      setStatus('Engine init error: ' + err.message);
-    }
-    return () => llm.current?.close();
+    FileSystem.getInfoAsync(LOCAL_MODEL_PATH).then(info => {
+      if (info.exists && info.size > 100000000) { // arbitrary size check to ensure it's not a 1KB error file
+        setLocalModelReady(true);
+      }
+    });
   }, []);
 
-  const downloadAndLoadModel = async () => {
-    if (isReady || isDownloading) return true;
-    
-    setIsDownloading(true);
-    setStatus('Downloading Gemma-4 E2B (~1.5GB)... Please wait.');
-    
+  const downloadFile = async () => {
     try {
-      await llm.current.loadModel("https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true", {
-        backend: "gpu", // Hardware acceleration
-        maxTokens: 512,
-        temperature: 0.7
-      });
+      setIsDownloading(true);
+      setDownloadError(null);
+      
+      const downloadResumable = FileSystem.createDownloadResumable(
+        MODEL_URL,
+        LOCAL_MODEL_PATH,
+        {},
+        (downloadProgress) => {
+          const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+          setDownloadProgress(progress);
+        }
+      );
 
-      setIsReady(true);
-      setStatus('Gemma is Local & Ready');
+      const result = await downloadResumable.downloadAsync();
+      if (result && result.status === 200) {
+        setLocalModelReady(true);
+      } else {
+        setDownloadError("Failed with status " + result?.status);
+      }
+    } catch (e: any) {
+      setDownloadError(e.message);
+    } finally {
       setIsDownloading(false);
-      return true;
-    } catch (err: any) {
-      setStatus('Download Error: ' + err.message);
-      console.error("Load Error:", err);
-      setIsDownloading(false);
-      return false;
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isDownloading) return;
+  // Only pass the local path to useModel IF it's fully downloaded to avoid internet drops
+  // Remove the 'file://' prefix because the native C++ engine expects an absolute file path, not a URI.
+  const {
+    model,
+    isReady: isModelReady,
+    error: modelError,
+    load,
+  } = useModel(localModelReady ? LOCAL_MODEL_PATH.replace('file://', '') : "", {
+    backend: 'cpu', 
+    autoLoad: false
+  });
 
-    if (!isReady) {
-      const success = await downloadAndLoadModel();
-      if (!success) return; // Stop if download failed
-    }
+  const handleSend = async () => {
+    if (!input.trim() || !isModelReady || !model) return;
 
     const userMsg = { id: Date.now().toString(), text: input, sender: 'user' };
     setMessages(prev => [...prev, userMsg]);
@@ -64,8 +76,7 @@ export default function App() {
 
     let fullResponse = "";
     try {
-      // streamingResponse: true makes the text appear word-by-word
-      await llm.current.sendMessageAsync(currentPrompt, (token: string, done: boolean) => {
+      await model.sendMessageAsync(currentPrompt, (token: string, done: boolean) => {
         fullResponse += token;
         setMessages(prev => prev.map(msg => 
           msg.id === aiId ? { ...msg, text: fullResponse } : msg
@@ -76,16 +87,37 @@ export default function App() {
     }
   };
 
+  const isReady = localModelReady && isModelReady;
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Gemma Local Chat</Text>
-        <Text style={[styles.status, {color: isReady ? '#2ecc71' : '#f39c12'}]}>{status}</Text>
-        {isDownloading && <ActivityIndicator size="small" color="#f39c12" style={{marginTop: 5}}/>}
-        {!isReady && !isDownloading && (
-          <TouchableOpacity style={styles.downloadBtn} onPress={downloadAndLoadModel}>
-            <Text style={styles.downloadText}>Download Model</Text>
-          </TouchableOpacity>
+        
+        {/* Status Rendering */}
+        {modelError || downloadError ? (
+          <Text style={[styles.status, {color: '#e74c3c'}]}>Error: {modelError || downloadError}</Text>
+        ) : isReady ? (
+          <Text style={[styles.status, {color: '#2ecc71'}]}>Gemma is Local & Ready</Text>
+        ) : localModelReady ? (
+           <View style={{alignItems: 'center'}}>
+             <Text style={[styles.status, {color: '#3498db'}]}>Model downloaded. Ready to load into Memory.</Text>
+             <TouchableOpacity style={styles.downloadBtn} onPress={() => load()}>
+               <Text style={styles.downloadText}>Load Engine</Text>
+             </TouchableOpacity>
+           </View>
+        ) : isDownloading ? (
+          <View style={{alignItems: 'center'}}>
+            <Text style={[styles.status, {color: '#f39c12'}]}>Downloading via Expo: {Math.round(downloadProgress * 100)}%</Text>
+            <ActivityIndicator size="small" color="#f39c12" style={{marginTop: 5}}/>
+          </View>
+        ) : (
+          <View style={{alignItems: 'center'}}>
+            <Text style={[styles.status, {color: '#bdc3c7'}]}>Ready to Download (1.5GB)</Text>
+            <TouchableOpacity style={styles.downloadBtn} onPress={downloadFile}>
+              <Text style={styles.downloadText}>Download Model</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -99,8 +131,14 @@ export default function App() {
       />
 
       <View style={styles.inputArea}>
-        <TextInput style={styles.input} placeholder={isReady ? "Type something..." : "Type to auto-download & chat..."} value={input} onChangeText={setInput} editable={!isDownloading}/>
-        <TouchableOpacity style={[styles.sendBtn, isDownloading && {opacity: 0.5}]} onPress={handleSend} disabled={isDownloading}>
+        <TextInput 
+          style={styles.input} 
+          placeholder={isReady ? "Type a message..." : "Download & load model first..."} 
+          value={input} 
+          onChangeText={setInput} 
+          editable={isReady}
+        />
+        <TouchableOpacity style={[styles.sendBtn, !isReady && {opacity: 0.5}]} onPress={handleSend} disabled={!isReady}>
           <Text style={styles.sendText}>Send</Text>
         </TouchableOpacity>
       </View>
