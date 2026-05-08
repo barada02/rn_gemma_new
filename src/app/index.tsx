@@ -3,6 +3,11 @@ import { useModel } from "react-native-litert-lm";
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useState, useEffect, useRef } from 'react';
+import Markdown from 'react-native-markdown-display';
+
+// Polyfill for punycode issue in markdown-it
+import 'punycode';
+
 
 const MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true";
 const LOCAL_MODEL_PATH = FileSystem.documentDirectory + "gemma-4-E2B-it.litertlm";
@@ -141,7 +146,13 @@ export default function App() {
         contentContainerStyle={styles.chatList}
         renderItem={({ item }) => (
           <View style={[styles.bubble, item.sender === 'user' ? styles.userBubble : styles.aiBubble]}>
-            <Text style={styles.msgText}>{item.text}</Text>
+            {item.sender === 'ai' ? (
+              <Markdown style={markdownStyles}>
+                {item.text}
+              </Markdown>
+            ) : (
+              <Text style={styles.msgText}>{item.text}</Text>
+            )}
           </View>
         )}
       />
@@ -180,3 +191,32 @@ const styles = StyleSheet.create({
   sendBtn: { marginLeft: 10, backgroundColor: '#3498db', borderRadius: 25, justifyContent: 'center', paddingHorizontal: 20 },
   sendText: { color: '#fff', fontWeight: 'bold' }
 });
+
+const markdownStyles = {
+  body: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  strong: {
+    fontWeight: 'bold',
+  },
+  em: {
+    fontStyle: 'italic',
+  },
+  bullet_list: {
+    marginVertical: 4,
+  },
+  code_inline: {
+    backgroundColor: '#444',
+    color: '#f8f8f2',
+    borderRadius: 4,
+    padding: 2,
+  },
+  code_block: {
+    backgroundColor: '#1e1e1e',
+    color: '#f8f8f2',
+    borderRadius: 8,
+    padding: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+};
