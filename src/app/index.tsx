@@ -2,7 +2,7 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, Keyboard
 import { useModel } from "react-native-litert-lm";
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import Markdown from 'react-native-markdown-display';
 
 // Polyfill for punycode issue in markdown-it
@@ -11,6 +11,21 @@ import 'punycode';
 
 const MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true";
 const LOCAL_MODEL_PATH = FileSystem.documentDirectory + "gemma-4-E2B-it.litertlm";
+
+// Memoized Message Bubble to prevent unnecessary re-renders during streaming
+const MessageBubble = memo(({ item }: { item: { id: string, text: string, sender: string } }) => {
+  return (
+    <View style={[styles.bubble, item.sender === 'user' ? styles.userBubble : styles.aiBubble]}>
+      {item.sender === 'ai' ? (
+        <Markdown style={markdownStyles}>
+          {item.text}
+        </Markdown>
+      ) : (
+        <Text style={styles.msgText}>{item.text}</Text>
+      )}
+    </View>
+  );
+}, (prev, next) => prev.item.text === next.item.text);
 
 export default function App() {
   const insets = useSafeAreaInsets();
@@ -144,17 +159,7 @@ export default function App() {
         ref={flatListRef}
         data={messages} keyExtractor={item => item.id}
         contentContainerStyle={styles.chatList}
-        renderItem={({ item }) => (
-          <View style={[styles.bubble, item.sender === 'user' ? styles.userBubble : styles.aiBubble]}>
-            {item.sender === 'ai' ? (
-              <Markdown style={markdownStyles}>
-                {item.text}
-              </Markdown>
-            ) : (
-              <Text style={styles.msgText}>{item.text}</Text>
-            )}
-          </View>
-        )}
+        renderItem={({ item }) => <MessageBubble item={item} />}
       />
 
       <View style={[styles.inputArea, { marginBottom: insets.bottom + 20 }]}>
