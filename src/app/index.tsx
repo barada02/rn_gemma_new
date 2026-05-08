@@ -7,9 +7,8 @@ import React, { useState, useEffect, useRef } from 'react';
 const MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true";
 const LOCAL_MODEL_PATH = FileSystem.documentDirectory + "gemma-4-E2B-it.litertlm";
 
+export default function App() {
   const insets = useSafeAreaInsets();
-
-  export default function App() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<{ id: string, text: string, sender: string }[]>([]);
   const [downloadProgress, setDownloadProgress] = useState(0);
