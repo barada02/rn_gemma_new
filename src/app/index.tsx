@@ -1,18 +1,48 @@
-import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { useModel } from "react-native-litert-lm";
 import * as FileSystem from 'expo-file-system/legacy';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useState, useEffect, useRef, memo } from 'react';
+import Markdown from 'react-native-markdown-display';
+
+// Polyfill for punycode issue in markdown-it
+import 'punycode';
+
 
 const MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true";
 const LOCAL_MODEL_PATH = FileSystem.documentDirectory + "gemma-4-E2B-it.litertlm";
 
+// Memoized Message Bubble to prevent unnecessary re-renders during streaming
+const MessageBubble = memo(({ item }: { item: { id: string, text: string, sender: string } }) => {
+  return (
+    <View style={[styles.bubble, item.sender === 'user' ? styles.userBubble : styles.aiBubble]}>
+      {item.sender === 'ai' ? (
+        <Markdown style={markdownStyles}>
+          {item.text}
+        </Markdown>
+      ) : (
+        <Text style={styles.msgText}>{item.text}</Text>
+      )}
+    </View>
+  );
+}, (prev, next) => prev.item.text === next.item.text);
+
 export default function App() {
+  const insets = useSafeAreaInsets();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<{ id: string, text: string, sender: string }[]>([]);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [localModelReady, setLocalModelReady] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const flatListRef = useRef<FlatList>(null);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }
+  }, [messages]);
 
   // Check if we already downloaded it previously
   useEffect(() => {
@@ -90,7 +120,11 @@ export default function App() {
   const isReady = localModelReady && isModelReady;
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Gemma Local Chat</Text>
         
@@ -121,22 +155,21 @@ export default function App() {
         )}
       </View>
 
-      <FlatList data={messages} keyExtractor={item => item.id}
+      <FlatList
+        ref={flatListRef}
+        data={messages} keyExtractor={item => item.id}
         contentContainerStyle={styles.chatList}
-        renderItem={({ item }) => (
-          <View style={[styles.bubble, item.sender === 'user' ? styles.userBubble : styles.aiBubble]}>
-            <Text style={styles.msgText}>{item.text}</Text>
-          </View>
-        )}
+        renderItem={({ item }) => <MessageBubble item={item} />}
       />
 
-      <View style={styles.inputArea}>
-        <TextInput 
-          style={styles.input} 
-          placeholder={isReady ? "Type a message..." : "Download & load model first..."} 
-          value={input} 
-          onChangeText={setInput} 
+      <View style={[styles.inputArea, { marginBottom: insets.bottom + 20 }]}>
+        <TextInput
+          style={styles.input}
+          placeholder={isReady ? "Type a message..." : "Download & load model first..."}
+          value={input}
+          onChangeText={setInput}
           editable={isReady}
+          multiline={false}
         />
         <TouchableOpacity style={[styles.sendBtn, !isReady && {opacity: 0.5}]} onPress={handleSend} disabled={!isReady}>
           <Text style={styles.sendText}>Send</Text>
@@ -163,3 +196,32 @@ const styles = StyleSheet.create({
   sendBtn: { marginLeft: 10, backgroundColor: '#3498db', borderRadius: 25, justifyContent: 'center', paddingHorizontal: 20 },
   sendText: { color: '#fff', fontWeight: 'bold' }
 });
+
+const markdownStyles = {
+  body: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  strong: {
+    fontWeight: 'bold',
+  },
+  em: {
+    fontStyle: 'italic',
+  },
+  bullet_list: {
+    marginVertical: 4,
+  },
+  code_inline: {
+    backgroundColor: '#444',
+    color: '#f8f8f2',
+    borderRadius: 4,
+    padding: 2,
+  },
+  code_block: {
+    backgroundColor: '#1e1e1e',
+    color: '#f8f8f2',
+    borderRadius: 8,
+    padding: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+};
